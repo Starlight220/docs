@@ -17,7 +17,7 @@ Contains the event-action bindings, providing a `void bind(BooleanSupplier, Runn
 
 
 ### `BooleanEvent`
-Represents a digital signal, similar in concept to command-based's `Trigger` class. Each event object is associated with a `EventLoop` instance from construction-time. Provides a `void whenTrue(Runnable)` method to bind actions to be executed each polling of the associated `EventLoop` instance if the represented digital signal / condition evaluates to `true`. A `boolean get()` method is provided for querying the signal; classes overriding `BooleanEvent` with custom functionality should either override this method or call `super()` with an argument fulfilling the wanted functionality.
+Represents a digital signal, similar in concept to command-based's `Trigger` class. Each event object is associated with a `EventLoop` instance (Java: object reference; C++: `shared_ptr`?) from construction-time. Provides a `void whenTrue(Runnable)` method to bind actions to be executed each polling of the associated `EventLoop` instance if the represented digital signal / condition evaluates to `true`. A `boolean get()` method is provided for querying the signal; classes overriding `BooleanEvent` with custom functionality should either override this method or call `super()` with an argument fulfilling the wanted functionality.
 
 Named `BooleanEvent` to leave room for other types of `*Event` classes in the future.
 
@@ -40,6 +40,28 @@ In all composition decorators, the result event inherits the `EventLoop` instanc
   - This is the only decorator that does not copy the `EventLoop` association.
 
 
+## Integrations
+
+- HID classes will include `BooleanEvent buttonEvent(int, EventLoop)` (naming TBD) methods that return a `BooleanEvent` instance representing the specified button, associated with the given `EventLoop` instance. This should lead to  the following syntax:
+```java
+ps4Controller
+  // get event
+  .squareEvent(eventLoop)
+  // only when newly pressed
+  .rising()
+  // bind action
+  .whenTrue(() -> System.out.println("Square was pressed!"));
+```
+
+### With Command-Based
+As a primary goal of the EventLoop API it should integrate as seamlessly as possible with the command-based paradigm, preferably bringing along its advantages. Therefore, the integrations will include:
+- `CommandScheduler`'s button queue will be an `EventLoop` instance instead of a collection of `Runnable`s, with a method to dynamically swap `EventLoop` instances.
+
+- Due to the above change, `Trigger` will inherit from `BooleanEvent`. All composition decorators are pulled up, leaving behind return-type override stubs (Java; C++ TBD) so that composition of a `Trigger` will return a `Trigger`. `Trigger` will keep the command-specific binding methods that are currently defined, with implementation changes to use event composition. `Trigger` constructor will take another `EventLoop` argument, defaulting to the current `EventLoop` held by the `CommandScheduler`. A `static Trigger cast(BooleanEvent)` utility method will be provided, mostly for internal use.
+
+- Command-based versions of HID classes (not yet included in WPILib) will override the `buttonEvent` methods with return-type stubs.
+
+
 ## Design Decisions and Considered Alternatives
 ### Loop-Event Association
 1. ***Associating at construction-time***
@@ -56,6 +78,9 @@ Therefore, option (1) was chosen.
 ## Open Questions
 - Multiple bindings and/or `get()` calls can mess up functionality, especially in cases where calling `get()` mutates the object (for example: debounced and falling/rising events). Should events support multiple bindings? If not, how would that be enforced? (C++ might be able to do this with `unique_ptr`). `get()` being `const` (C++) might help this problem. Maybe not provide the `get()` method at all? If `get()` is not `const`, how can `BooleanEvent` objects be sent to telemetry without mutating themselves?
 
+- C++ semantics: copy/move, value/reference/pointer/`unique_ptr`/`shared_ptr`?
+
 
 ## Future Steps:
 - An `EventRobot` base class.
+- Command-based's default command mechanism should also be refactored to provide `Trigger`s that teams can use to customize the default command binding, as the current mechanism is very limiting.
